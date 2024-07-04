@@ -24,15 +24,14 @@ def main():
         course_id, assignment_id = extract_course_assignment_ids(assignment_url)
         canvas = Canvas(api_url, api_key)
 
-        def initiate_file_upload(file_path, user_id):
+        def initiate_file_upload(file_path, user_id, new_file_name):
             """Initiate file upload for a submission."""
             url = f"{api_url}/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions/{user_id}/files"
             headers = {
                 'Authorization': f'Bearer {api_key}'
             }
-            file_name = os.path.basename(file_path)
             response = requests.post(url, headers=headers, data={
-                'name': file_name,
+                'name': new_file_name,
                 'size': os.path.getsize(file_path),
                 'content_type': 'application/pdf'
             })
@@ -56,28 +55,6 @@ def main():
             else:
                 return upload_response.json().get('id')
 
-        def submit_assignment(user_id, file_id):
-            """Submit the assignment with the uploaded file ID."""
-            submission_url = f"{api_url}/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions"
-            submission_data = {
-                'submission': {
-                    'submission_type': 'online_upload',
-                    'file_ids': [file_id]
-                },
-                'as_user_id': user_id  # Submit on behalf of the student
-            }
-            submission_headers = {
-                'Authorization': f'Bearer {api_key}',
-                'Content-Type': 'application/json'
-            }
-
-            submission_response = requests.post(submission_url, headers=submission_headers, json=submission_data)
-
-            if submission_response.status_code != 200:
-                raise CanvasException("Submission failed.")
-
-            return submission_response.json()
-
         # Process each uploaded file
         for uploaded_file in uploaded_files:
             original_file_name = uploaded_file.name
@@ -90,7 +67,7 @@ def main():
             if os.path.exists(new_file_name):
                 try:
                     # Initiate file upload
-                    upload_initiation_response = initiate_file_upload(new_file_name, user_id)
+                    upload_initiation_response = initiate_file_upload(new_file_name, user_id, new_file_name)
                     upload_url = upload_initiation_response['upload_url']
                     upload_params = upload_initiation_response['upload_params']
 
