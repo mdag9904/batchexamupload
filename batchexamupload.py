@@ -49,6 +49,28 @@ def main():
             else:
                 return upload_response.json().get('id')
 
+        def submit_assignment(user_id, file_id):
+            """Submit the assignment with the uploaded file ID."""
+            submission_url = f"{api_url}/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions"
+            submission_data = {
+                'submission': {
+                    'submission_type': 'online_upload',
+                    'file_ids': [file_id]
+                },
+                'as_user_id': user_id  # Submit on behalf of the student
+            }
+            submission_headers = {
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            }
+
+            submission_response = requests.post(submission_url, headers=submission_headers, json=submission_data)
+
+            if submission_response.status_code != 200:
+                raise CanvasException("Submission failed.")
+
+            return submission_response.json()
+
         # Process each uploaded file
         for uploaded_file in uploaded_files:
             file_name = uploaded_file.name
@@ -67,8 +89,12 @@ def main():
                     # Upload the file
                     file_id = upload_file(upload_url, upload_params, file_name)
                     st.success(f"Uploaded file for student {user_id}, file ID: {file_id}")
+
+                    # Submit the assignment
+                    submission_response = submit_assignment(user_id, file_id)
+                    st.success(f"Submitted for student {user_id}")
                 except CanvasException as e:
-                    st.error(f"Failed to upload for student {user_id}: {e}")
+                    st.error(f"Failed to upload/submit for student {user_id}: {e}")
                 finally:
                     os.remove(file_name)
             else:
