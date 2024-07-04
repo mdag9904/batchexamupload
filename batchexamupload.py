@@ -11,9 +11,10 @@ def main():
     api_key = st.text_input("Canvas API Key", type="password")
     course_id = st.number_input("Course ID", value=26075)
     assignment_id = st.number_input("Assignment ID", value=359794)
-    pdf_directory = st.text_input("PDF Directory", "/Users/markdagher_1/Downloads/Exams")
-
-    if st.button("Upload PDFs"):
+    
+    uploaded_files = st.file_uploader("Choose PDF files", type="pdf", accept_multiple_files=True)
+    
+    if st.button("Upload PDFs") and uploaded_files:
         canvas = Canvas(api_url, api_key)
 
         def initiate_file_upload(file_path, user_id):
@@ -48,26 +49,30 @@ def main():
             else:
                 return upload_response.json().get('id')
 
-        # Upload files to the assignment submission context
-        for file_name in os.listdir(pdf_directory):
-            if file_name.endswith('.pdf'):
-                file_path = os.path.join(pdf_directory, file_name)
-                user_id = file_name.replace('.pdf', '')  # Extract Canvas user ID from filename
+        # Process each uploaded file
+        for uploaded_file in uploaded_files:
+            file_name = uploaded_file.name
+            user_id = file_name.replace('.pdf', '')  # Extract Canvas user ID from filename
 
-                if os.path.exists(file_path):
-                    try:
-                        # Initiate file upload
-                        upload_initiation_response = initiate_file_upload(file_path, user_id)
-                        upload_url = upload_initiation_response['upload_url']
-                        upload_params = upload_initiation_response['upload_params']
+            with open(file_name, 'wb') as f:
+                f.write(uploaded_file.getbuffer())
 
-                        # Upload the file
-                        file_id = upload_file(upload_url, upload_params, file_path)
-                        st.success(f"Uploaded file for student {user_id}, file ID: {file_id}")
-                    except CanvasException:
-                        st.error(f"Failed to upload for student {user_id}")
-                else:
-                    st.warning(f"File not found for user ID {user_id}")
+            if os.path.exists(file_name):
+                try:
+                    # Initiate file upload
+                    upload_initiation_response = initiate_file_upload(file_name, user_id)
+                    upload_url = upload_initiation_response['upload_url']
+                    upload_params = upload_initiation_response['upload_params']
+
+                    # Upload the file
+                    file_id = upload_file(upload_url, upload_params, file_name)
+                    st.success(f"Uploaded file for student {user_id}, file ID: {file_id}")
+                except CanvasException as e:
+                    st.error(f"Failed to upload for student {user_id}: {e}")
+                finally:
+                    os.remove(file_name)
+            else:
+                st.warning(f"File not found for user ID {user_id}")
 
         st.info("All uploads processed.")
 
