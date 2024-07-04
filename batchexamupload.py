@@ -4,17 +4,23 @@ import requests
 from canvasapi import Canvas
 from canvasapi.exceptions import CanvasException
 
+def extract_course_assignment_ids(assignment_url):
+    parts = assignment_url.split('/')
+    course_id = parts[4]
+    assignment_id = parts[6]
+    return course_id, assignment_id
+
 def main():
     st.title("Canvas Batch Exam Upload")
 
     api_url = st.text_input("Canvas API URL", "https://canvas-parra.beta.instructure.com/")
     api_key = st.text_input("Canvas API Key", type="password")
-    course_id = st.number_input("Course ID", value=26075)
-    assignment_id = st.number_input("Assignment ID", value=359794)
+    assignment_url = st.text_input("Assignment Link")
     
     uploaded_files = st.file_uploader("Choose PDF files", type="pdf", accept_multiple_files=True)
     
     if st.button("Upload PDFs") and uploaded_files:
+        course_id, assignment_id = extract_course_assignment_ids(assignment_url)
         canvas = Canvas(api_url, api_key)
 
         def initiate_file_upload(file_path, user_id):
