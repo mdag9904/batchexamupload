@@ -3,6 +3,7 @@ import os
 import requests
 from canvasapi import Canvas
 from canvasapi.exceptions import CanvasException
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def extract_course_assignment_ids(assignment_url):
     parts = assignment_url.split('/')
@@ -94,8 +95,7 @@ def main():
 
             return submission_response.json()
 
-        # Process each uploaded file
-        for uploaded_file in uploaded_files:
+        def process_file(uploaded_file):
             original_file_name = uploaded_file.name
             user_id = original_file_name.replace('.pdf', '')  # Extract Canvas user ID from filename
             file_name_with_suffix = f"{user_id}-{suffix}.pdf" if suffix else original_file_name
@@ -127,6 +127,12 @@ def main():
                     os.remove(file_name_with_suffix)
             else:
                 st.warning(f"File not found for user ID {user_id}")
+
+        # Use ThreadPoolExecutor to process files concurrently
+        with ThreadPoolExecutor() as executor:
+            futures = [executor.submit(process_file, uploaded_file) for uploaded_file in uploaded_files]
+            for future in as_completed(futures):
+                future.result()
 
         st.info("All uploads processed.")
 
