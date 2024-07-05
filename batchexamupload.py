@@ -3,7 +3,6 @@ import os
 import requests
 from canvasapi import Canvas
 from canvasapi.exceptions import CanvasException
-from pathlib import Path
 
 def extract_course_assignment_ids(assignment_url):
     parts = assignment_url.split('/')
@@ -18,10 +17,10 @@ def main():
     api_key = st.text_input("Canvas API Key", type="password")
     assignment_url = st.text_input("Assignment Link")
     suffix = st.text_input("File Suffix (Optional)", "")
-
-    folder_selected = st.text_input("Path to folder containing PDFs")
     
-    if st.button("Upload PDFs") and folder_selected:
+    uploaded_files = st.file_uploader("Choose PDF files", type="pdf", accept_multiple_files=True)
+    
+    if st.button("Upload PDFs") and uploaded_files:
         course_id, assignment_id = extract_course_assignment_ids(assignment_url)
         canvas = Canvas(api_url, api_key)
 
@@ -95,21 +94,24 @@ def main():
 
             return submission_response.json()
 
-        # Process each PDF file in the selected folder
-        pdf_files = list(Path(folder_selected).glob("*.pdf"))
-        for pdf_file in pdf_files:
-            user_id = pdf_file.stem  # Extract Canvas user ID from filename
-            file_name_with_suffix = f"{user_id}-{suffix}.pdf" if suffix else pdf_file.name
+        # Process each uploaded file
+        for uploaded_file in uploaded_files:
+            original_file_name = uploaded_file.name
+            user_id = original_file_name.replace('.pdf', '')  # Extract Canvas user ID from filename
+            file_name_with_suffix = f"{user_id}-{suffix}.pdf" if suffix else original_file_name
 
-            if pdf_file.exists():
+            with open(file_name_with_suffix, 'wb') as f:
+                f.write(uploaded_file.getbuffer())
+
+            if os.path.exists(file_name_with_suffix):
                 try:
                     # Initiate file upload
-                    upload_initiation_response = initiate_file_upload(pdf_file, user_id, file_name_with_suffix)
+                    upload_initiation_response = initiate_file_upload(file_name_with_suffix, user_id, file_name_with_suffix)
                     upload_url = upload_initiation_response['upload_url']
                     upload_params = upload_initiation_response['upload_params']
 
                     # Upload the file
-                    file_id = upload_file(upload_url, upload_params, pdf_file)
+                    file_id = upload_file(upload_url, upload_params, file_name_with_suffix)
                     st.success(f"Uploaded file for student {user_id}, file ID: {file_id}")
 
                     # Get existing submission files
@@ -121,6 +123,8 @@ def main():
                     st.success(f"Submitted for student {user_id}")
                 except CanvasException as e:
                     st.error(f"Failed to upload/submit for student {user_id}: {e}")
+                finally:
+                    os.remove(file_name_with_suffix)
             else:
                 st.warning(f"File not found for user ID {user_id}")
 
