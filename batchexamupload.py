@@ -55,13 +55,30 @@ def main():
             else:
                 return upload_response.json().get('id')
 
-        def submit_assignment(user_id, file_id):
-            """Submit the assignment with the uploaded file ID."""
+        def get_existing_submission_files(user_id):
+            """Get existing files for a submission."""
+            submission_url = f"{api_url}/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions/{user_id}"
+            headers = {
+                'Authorization': f'Bearer {api_key}'
+            }
+            response = requests.get(submission_url, headers=headers)
+
+            if response.status_code != 200:
+                return []
+
+            submission_data = response.json()
+            if 'attachments' in submission_data:
+                return [attachment['id'] for attachment in submission_data['attachments']]
+            else:
+                return []
+
+        def submit_assignment(user_id, file_ids):
+            """Submit the assignment with the uploaded file IDs."""
             submission_url = f"{api_url}/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions"
             submission_data = {
                 'submission': {
                     'submission_type': 'online_upload',
-                    'file_ids': [file_id]
+                    'file_ids': file_ids
                 },
                 'as_user_id': user_id  # Submit on behalf of the student
             }
@@ -94,11 +111,15 @@ def main():
                     upload_params = upload_initiation_response['upload_params']
 
                     # Upload the file
-                    file_id = upload_file(upload_url, upload_params, file_name_with_suffix)
-                    st.success(f"Uploaded file for student {user_id}, file ID: {file_id}")
+                    new_file_id = upload_file(upload_url, upload_params, file_name_with_suffix)
+                    st.success(f"Uploaded file for student {user_id}, file ID: {new_file_id}")
 
-                    # Submit the assignment
-                    submission_response = submit_assignment(user_id, file_id)
+                    # Get existing submission files
+                    existing_file_ids = get_existing_submission_files(user_id)
+                    all_file_ids = existing_file_ids + [new_file_id]
+
+                    # Submit the assignment with all files
+                    submission_response = submit_assignment(user_id, all_file_ids)
                     st.success(f"Submitted for student {user_id}")
                 except CanvasException as e:
                     st.error(f"Failed to upload/submit for student {user_id}: {e}")
