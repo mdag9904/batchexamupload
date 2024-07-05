@@ -24,14 +24,14 @@ def main():
         course_id, assignment_id = extract_course_assignment_ids(assignment_url)
         canvas = Canvas(api_url, api_key)
 
-        def initiate_file_upload(file_path, user_id, new_file_name):
+        def initiate_file_upload(file_path, user_id, file_name_with_suffix):
             """Initiate file upload for a submission."""
             url = f"{api_url}/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions/{user_id}/files"
             headers = {
                 'Authorization': f'Bearer {api_key}'
             }
             response = requests.post(url, headers=headers, data={
-                'name': new_file_name,
+                'name': file_name_with_suffix,
                 'size': os.path.getsize(file_path),
                 'content_type': 'application/pdf'
             })
@@ -59,25 +59,29 @@ def main():
         for uploaded_file in uploaded_files:
             original_file_name = uploaded_file.name
             user_id = original_file_name.replace('.pdf', '')  # Extract Canvas user ID from filename
-            new_file_name = f"{user_id}-{suffix}.pdf" if suffix else original_file_name
+            file_name_with_suffix = f"{user_id}-{suffix}.pdf" if suffix else original_file_name
 
-            with open(new_file_name, 'wb') as f:
+            with open(file_name_with_suffix, 'wb') as f:
                 f.write(uploaded_file.getbuffer())
 
-            if os.path.exists(new_file_name):
+            if os.path.exists(file_name_with_suffix):
                 try:
                     # Initiate file upload
-                    upload_initiation_response = initiate_file_upload(new_file_name, user_id, new_file_name)
+                    upload_initiation_response = initiate_file_upload(file_name_with_suffix, user_id, file_name_with_suffix)
                     upload_url = upload_initiation_response['upload_url']
                     upload_params = upload_initiation_response['upload_params']
 
                     # Upload the file
-                    file_id = upload_file(upload_url, upload_params, new_file_name)
+                    file_id = upload_file(upload_url, upload_params, file_name_with_suffix)
                     st.success(f"Uploaded file for student {user_id}, file ID: {file_id}")
+
+                    # Submit the assignment
+                    submission_response = submit_assignment(user_id, file_id)
+                    st.success(f"Submitted for student {user_id}")
                 except CanvasException as e:
-                    st.error(f"Failed to upload for student {user_id}: {e}")
+                    st.error(f"Failed to upload/submit for student {user_id}: {e}")
                 finally:
-                    os.remove(new_file_name)
+                    os.remove(file_name_with_suffix)
             else:
                 st.warning(f"File not found for user ID {user_id}")
 
