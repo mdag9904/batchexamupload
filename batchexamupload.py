@@ -14,7 +14,7 @@ def extract_course_assignment_ids(assignment_url):
 def main():
     st.title("Canvas Batch Exam Upload")
 
-    api_url = st.text_input("Canvas API URL", "https://canvas-parra.beta.instructure.com/")
+    api_url = st.text_input("Canvas API URL", "https://canvas.parra.catholic.edu.au/")
     api_key = st.text_input("Canvas API Key", type="password")
     assignment_url = st.text_input("Assignment Link")
     suffix = st.text_input("File Suffix (Optional)", "")
