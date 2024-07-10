@@ -38,7 +38,7 @@ def main():
             })
 
             if response.status_code != 200:
-                raise CanvasException(f"File upload initiation failed: {response.json()}")
+                raise CanvasException("File upload initiation failed.")
 
             return response.json()
 
@@ -48,7 +48,7 @@ def main():
                 upload_response = requests.post(upload_url, data=upload_params, files={'file': f})
 
             if upload_response.status_code not in [200, 201, 302]:
-                raise CanvasException(f"File upload failed: {upload_response.json()}")
+                raise CanvasException("File upload failed.")
 
             location_url = upload_response.headers.get('Location')
             if location_url:
@@ -91,7 +91,7 @@ def main():
             submission_response = requests.post(submission_url, headers=submission_headers, json=submission_data)
 
             if submission_response.status_code != 200:
-                raise CanvasException(f"Submission failed: {submission_response.json()}")
+                raise CanvasException("Submission failed.")
 
             return submission_response.json()
 
@@ -105,11 +105,6 @@ def main():
 
             if os.path.exists(file_name_with_suffix):
                 try:
-                    # Check existing files
-                    existing_files = get_existing_submission_files(user_id)
-                    if existing_files:
-                        st.info(f"Student {user_id} already has existing files: {existing_files}")
-
                     # Initiate file upload
                     upload_initiation_response = initiate_file_upload(file_name_with_suffix, user_id, file_name_with_suffix)
                     upload_url = upload_initiation_response['upload_url']
@@ -137,10 +132,7 @@ def main():
         with ThreadPoolExecutor() as executor:
             futures = [executor.submit(process_file, uploaded_file) for uploaded_file in uploaded_files]
             for future in as_completed(futures):
-                try:
-                    future.result()
-                except Exception as e:
-                    st.error(f"Error processing file: {e}")
+                future.result()
 
         st.info("All uploads processed.")
 
