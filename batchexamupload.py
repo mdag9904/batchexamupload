@@ -38,6 +38,7 @@ def main():
             })
 
             if response.status_code != 200:
+                st.error(f"File upload initiation failed for user {user_id}: {response.status_code} {response.text}")
                 raise CanvasException("File upload initiation failed.")
 
             return response.json()
@@ -48,6 +49,7 @@ def main():
                 upload_response = requests.post(upload_url, data=upload_params, files={'file': f})
 
             if upload_response.status_code not in [200, 201, 302]:
+                st.error(f"File upload failed: {upload_response.status_code} {upload_response.text}")
                 raise CanvasException("File upload failed.")
 
             location_url = upload_response.headers.get('Location')
@@ -65,6 +67,7 @@ def main():
             response = requests.get(submission_url, headers=headers)
 
             if response.status_code != 200:
+                st.error(f"Failed to get existing submission files for user {user_id}: {response.status_code} {response.text}")
                 return []
 
             submission_data = response.json()
@@ -91,6 +94,7 @@ def main():
             submission_response = requests.post(submission_url, headers=submission_headers, json=submission_data)
 
             if submission_response.status_code != 200:
+                st.error(f"Submission failed for user {user_id}: {submission_response.status_code} {submission_response.text}")
                 raise CanvasException("Submission failed.")
 
             return submission_response.json()
