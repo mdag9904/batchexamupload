@@ -18,9 +18,9 @@ def main():
     api_key = st.text_input("Canvas API Key", type="password")
     assignment_url = st.text_input("Assignment Link")
     suffix = st.text_input("File Suffix (Optional)", "")
-
+    
     uploaded_files = st.file_uploader("Choose PDF files", type="pdf", accept_multiple_files=True)
-
+    
     if st.button("Upload PDFs") and uploaded_files:
         course_id, assignment_id = extract_course_assignment_ids(assignment_url)
         canvas = Canvas(api_url, api_key)
@@ -137,7 +137,10 @@ def main():
         with ThreadPoolExecutor() as executor:
             futures = [executor.submit(process_file, uploaded_file) for uploaded_file in uploaded_files]
             for future in as_completed(futures):
-                future.result()
+                try:
+                    future.result()
+                except Exception as e:
+                    st.error(f"Error processing file: {e}")
 
         st.info("All uploads processed.")
 
