@@ -1,6 +1,6 @@
+import streamlit as st
 import os
 import requests
-import streamlit as st
 from canvasapi import Canvas
 from canvasapi.exceptions import CanvasException
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -18,9 +18,9 @@ def main():
     api_key = st.text_input("Canvas API Key", type="password")
     assignment_url = st.text_input("Assignment Link")
     suffix = st.text_input("File Suffix (Optional)", "")
-
+    
     uploaded_files = st.file_uploader("Choose PDF files", type="pdf", accept_multiple_files=True)
-
+    
     if st.button("Upload PDFs") and uploaded_files:
         course_id, assignment_id = extract_course_assignment_ids(assignment_url)
         canvas = Canvas(api_url, api_key)
@@ -77,10 +77,13 @@ def main():
             original_file_name = uploaded_file.name
             user_id = original_file_name.replace('.pdf', '')
             file_name_with_suffix = f"{user_id}-{suffix}.pdf" if suffix else original_file_name
+
             with open(file_name_with_suffix, 'wb') as f:
                 f.write(uploaded_file.getbuffer())
+
             if os.path.exists(file_name_with_suffix):
                 try:
+                    st.text(f"Processing file for student {user_id}")
                     upload_initiation_response = initiate_file_upload(file_name_with_suffix, user_id, file_name_with_suffix)
                     upload_url = upload_initiation_response['upload_url']
                     upload_params = upload_initiation_response['upload_params']
@@ -101,8 +104,8 @@ def main():
             futures = [executor.submit(process_file, uploaded_file) for uploaded_file in uploaded_files]
             for future in as_completed(futures):
                 future.result()
-
-        st.info("All uploads processed.")
+        
+        st.info("All uploads attempted. Check logs for details.")
 
 if __name__ == "__main__":
     main()
