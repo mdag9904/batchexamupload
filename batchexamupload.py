@@ -1,140 +1,141 @@
 import streamlit as st
-import os
 import requests
-from canvasapi import Canvas
-from canvasapi.exceptions import CanvasException
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import pandas as pd
+import matplotlib.pyplot as plt
+import re
 
-def extract_course_assignment_ids(assignment_url):
-    parts = assignment_url.split('/')
-    course_id = parts[4]
-    assignment_id = parts[6]
-    return course_id, assignment_id
+# Function to extract course ID from link
+def extract_course_id_from_link(link):
+    match = re.search(r'courses/(\d+)', link)
+    if match:
+        return match.group(1)
+    else:
+        return None
 
-def main():
-    st.title("Canvas Batch Exam Upload")
+# Function to fetch assignment grades for a course
+def get_grades(api_url, api_key, course_id):
+    headers = {"Authorization": f"Bearer {api_key}"}
+    response = requests.get(f"{api_url}/api/v1/courses/{course_id}/students/submissions?student_ids[]=all&include[]=submission_comments", headers=headers)
+    response.raise_for_status()
+    return response.json()
 
-    api_url = st.text_input("Canvas API URL", "https://canvas.parra.catholic.edu.au/")
-    api_key = st.text_input("Canvas API Key", type="password")
-    assignment_url = st.text_input("Assignment Link")
-    suffix = st.text_input("File Suffix (Optional)", "")
-    
-    uploaded_files = st.file_uploader("Choose PDF files", type="pdf", accept_multiple_files=True)
-    
-    if st.button("Upload PDFs") and uploaded_files:
-        course_id, assignment_id = extract_course_assignment_ids(assignment_url)
-        canvas = Canvas(api_url, api_key)
+# Function to fetch assignment details
+def get_assignments(api_url, api_key, course_id):
+    headers = {"Authorization": f"Bearer {api_key}"}
+    response = requests.get(f"{api_url}/api/v1/courses/{course_id}/assignments", headers=headers)
+    response.raise_for_status()
+    return response.json()
 
-        def initiate_file_upload(file_path, user_id, file_name_with_suffix):
-            """Initiate file upload for a submission."""
-            url = f"{api_url}/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions/{user_id}/files"
-            headers = {
-                'Authorization': f'Bearer {api_key}'
-            }
-            response = requests.post(url, headers=headers, data={
-                'name': file_name_with_suffix,
-                'size': os.path.getsize(file_path),
-                'content_type': 'application/pdf'
-            })
+# Function to fetch student details
+def get_students(api_url, api_key, course_id):
+    headers = {"Authorization": f"Bearer {api_key}"}
+    response = requests.get(f"{api_url}/api/v1/courses/{course_id}/enrollments?type[]=StudentEnrollment&state[]=active", headers=headers)
+    response.raise_for_status()
+    return response.json()
 
-            if response.status_code != 200:
-                raise CanvasException("File upload initiation failed.")
+# Streamlit app layout
+st.set_page_config(layout="wide")
+st.title("Canvas Course Grade Analysis")
 
-            return response.json()
+api_url = st.text_input("Canvas API URL", "https://canvas-parra.beta.instructure.com")
+api_key = st.text_input("Canvas API Key", type="password")
+course_link = st.text_input("Course Link")
 
-        def upload_file(upload_url, upload_params, file_path):
-            """Upload the file to the given URL with provided parameters."""
-            with open(file_path, 'rb') as f:
-                upload_response = requests.post(upload_url, data=upload_params, files={'file': f})
-
-            if upload_response.status_code not in [200, 201, 302]:
-                raise CanvasException("File upload failed.")
-
-            location_url = upload_response.headers.get('Location')
-            if location_url:
-                return location_url.split('/')[-1]  # Extract ID from URL
-            else:
-                return upload_response.json().get('id')
-
-        def get_existing_submission_files(user_id):
-            """Get existing files for a submission."""
-            submission_url = f"{api_url}/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions/{user_id}"
-            headers = {
-                'Authorization': f'Bearer {api_key}'
-            }
-            response = requests.get(submission_url, headers=headers)
-
-            if response.status_code != 200:
-                return []
-
-            submission_data = response.json()
-            if 'attachments' in submission_data:
-                return [attachment['id'] for attachment in submission_data['attachments']]
-            else:
-                return []
-
-        def submit_assignment(user_id, file_ids):
-            """Submit the assignment with the uploaded file IDs."""
-            submission_url = f"{api_url}/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions"
-            submission_data = {
-                'submission': {
-                    'submission_type': 'online_upload',
-                    'file_ids': file_ids
-                },
-                'as_user_id': user_id  # Submit on behalf of the student
-            }
-            submission_headers = {
-                'Authorization': f'Bearer {api_key}',
-                'Content-Type': 'application/json'
-            }
-
-            submission_response = requests.post(submission_url, headers=submission_headers, json=submission_data)
-
-            if submission_response.status_code != 200:
-                raise CanvasException("Submission failed.")
-
-            return submission_response.json()
-
-        def process_file(uploaded_file):
-            original_file_name = uploaded_file.name
-            user_id = original_file_name.replace('.pdf', '')  # Extract Canvas user ID from filename
-            file_name_with_suffix = f"{user_id}-{suffix}.pdf" if suffix else original_file_name
-
-            with open(file_name_with_suffix, 'wb') as f:
-                f.write(uploaded_file.getbuffer())
-
-            if os.path.exists(file_name_with_suffix):
+if st.button("Load Assignments") or "assignments" in st.session_state:
+    if not api_key or not course_link:
+        st.error("Please provide API Key and Course Link")
+    else:
+        course_id = extract_course_id_from_link(course_link)
+        if not course_id:
+            st.error("Invalid course link")
+        else:
+            if "assignments" not in st.session_state:
                 try:
-                    # Initiate file upload
-                    upload_initiation_response = initiate_file_upload(file_name_with_suffix, user_id, file_name_with_suffix)
-                    upload_url = upload_initiation_response['upload_url']
-                    upload_params = upload_initiation_response['upload_params']
+                    st.session_state.assignments = get_assignments(api_url, api_key, course_id)
+                except requests.exceptions.RequestException as e:
+                    st.error(f"Error fetching assignments: {e}")
+                    st.stop()
 
-                    # Upload the file
-                    file_id = upload_file(upload_url, upload_params, file_name_with_suffix)
-                    st.success(f"Uploaded file for student {user_id}, file ID: {file_id}")
+            if "students" not in st.session_state:
+                try:
+                    st.session_state.students = get_students(api_url, api_key, course_id)
+                    st.write("Students JSON structure:", st.session_state.students)  # Log the JSON structure
+                except requests.exceptions.RequestException as e:
+                    st.error(f"Error fetching students: {e}")
+                    st.stop()
 
-                    # Get existing submission files
-                    existing_file_ids = get_existing_submission_files(user_id)
-                    all_file_ids = existing_file_ids + [file_id]
+            assignments_df = pd.DataFrame(st.session_state.assignments)
+            
+            # Normalize student data to flatten nested JSON
+            students = st.session_state.students
+            students_df = pd.json_normalize(students, sep='_')
+            st.write("Normalized students_df structure:", students_df.columns.tolist())  # Log the DataFrame structure
 
-                    # Submit the assignment with all files
-                    submission_response = submit_assignment(user_id, all_file_ids)
-                    st.success(f"Submitted for student {user_id}")
-                except CanvasException as e:
-                    st.error(f"Failed to upload/submit for student {user_id}: {e}")
-                finally:
-                    os.remove(file_name_with_suffix)
-            else:
-                st.warning(f"File not found for user ID {user_id}")
+            # Correct column names based on the normalized DataFrame
+            students_df = students_df[['user_id', 'user_name']].rename(columns={'user_id': 'Student ID', 'user_name': 'Student Name'})
 
-        # Use ThreadPoolExecutor to process files concurrently
-        with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(process_file, uploaded_file) for uploaded_file in uploaded_files]
-            for future in as_completed(futures):
-                future.result()
+            # Ensure 'Student ID' is a string
+            students_df['Student ID'] = students_df['Student ID'].astype(str)
 
-        st.info("All uploads processed.")
+            st.dataframe(assignments_df[['id', 'name', 'points_possible']])
+            
+            selected_assignments = st.multiselect("Select Assignments to Include", assignments_df['name'], key="selected_assignments")
+            if selected_assignments:
+                weights = {}
+                for assignment in selected_assignments:
+                    weight = st.number_input(f"Weight for {assignment}", min_value=0.0, max_value=1.0, step=0.1, key=f"weight_{assignment}")
+                    weights[assignment] = weight
+                
+                if st.button("Generate Report"):
+                    try:
+                        grades = get_grades(api_url, api_key, course_id)
+                        st.write("Grades JSON structure:", grades)  # Log the grades structure
+                    except requests.exceptions.RequestException as e:
+                        st.error(f"Error fetching grades: {e}")
+                        st.stop()
 
-if __name__ == "__main__":
-    main()
+                    student_grades = {str(student['Student ID']): {} for student in students_df.to_dict('records')}
+                    st.write("Initialized student_grades:", student_grades)  # Log initialized student_grades
+
+                    for grade in grades:
+                        user_id = str(grade['user_id'])  # Ensure user_id is a string
+                        assignment_id = grade['assignment_id']
+                        score = grade['entered_grade'] if 'entered_grade' in grade else 0
+
+                        # Check if assignment is selected
+                        assignment_name = assignments_df.loc[assignments_df['id'] == assignment_id, 'name'].values[0]
+                        if assignment_name in selected_assignments:
+                            if user_id in student_grades:
+                                student_grades[user_id][assignment_name] = float(score)
+                            else:
+                                st.warning(f"User ID {user_id} not found in student_grades")
+
+                    # Filter out students with no grades
+                    student_grades = {k: v for k, v in student_grades.items() if v}
+
+                    student_scores = []
+                    for student_id, grades in student_grades.items():
+                        total_score = sum(grades.get(assignment, 0) * weights[assignment] for assignment in selected_assignments)
+                        student_scores.append((student_id, total_score))
+                    
+                    student_scores_df = pd.DataFrame(student_scores, columns=['Student ID', 'Total Score'])
+                    student_scores_df['Student ID'] = student_scores_df['Student ID'].astype(str)  # Ensure 'Student ID' is a string
+                    student_scores_df = student_scores_df.merge(students_df, on='Student ID', how='left')
+                    student_scores_df['Rank'] = student_scores_df['Total Score'].rank(ascending=False)
+                    
+                    st.dataframe(student_scores_df)
+                    
+                    fig, ax = plt.subplots()
+                    ax.hist(student_scores_df['Total Score'], bins=10)
+                    ax.set_title('Distribution of Total Scores')
+                    ax.set_xlabel('Total Score')
+                    ax.set_ylabel('Number of Students')
+                    st.pyplot(fig)
+                    
+                    fig, ax = plt.subplots()
+                    ax.plot(student_scores_df['Student Name'], student_scores_df['Total Score'], marker='o')
+                    ax.set_title('Total Scores by Student')
+                    ax.set_xlabel('Student Name')
+                    ax.set_ylabel('Total Score')
+                    plt.xticks(rotation=90)
+                    st.pyplot(fig)
