@@ -15,7 +15,7 @@ def main():
     st.title("Canvas Batch Exam Upload")
 
     api_url = st.text_input("Canvas API URL", "https://canvas.parra.catholic.edu.au/")
-    api_key = st.text_input("Canvas API Key", type="password")
+    api_key = "11905~vRUvZwu6PRvJQBMTEkctu4r8T6HY4KhJYJBJXVJ2H3rrk7eJAwvF24fE6T2x3heK"  # Hardcoded API Key
     assignment_url = st.text_input("Assignment Link")
     suffix = st.text_input("File Suffix (Optional)", "")
     
